@@ -1,5 +1,6 @@
 import express from "express";
 import { restaurantsRouter, cuisinesRouter } from "./routes";
+import { errorHandler } from "./middlewares/errorHandler";
 
 const app = express();
 
@@ -11,6 +12,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/restaurants', restaurantsRouter);
 app.use('/cuisines', cuisinesRouter);
 
+app.use(errorHandler);
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
     console.log(`App running at port ${PORT}`);
