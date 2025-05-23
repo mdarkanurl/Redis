@@ -3,7 +3,7 @@ import { validate } from "../middlewares/validate";
 import { Restaurant, RestaurantSchema } from "../schema/restaurants";
 import { ReviewSchema, Review } from "../schema/review";
 import { nanoid } from "nanoid";
-import { restaurantKeyById, reviewDetailsKeyById, reviewKeyById } from "../utils/redisKeys";
+import { cuisineKey, cuisinesKey, restaurantCuisinesKeyById, restaurantKeyById, reviewDetailsKeyById, reviewKeyById } from "../utils/redisKeys";
 import redis from "../utils/redis";
 import { errorResponse, successResponse } from "../utils/res";
 import { checkRestaurantExists } from "../middlewares/checkRestaurantId";
@@ -19,8 +19,19 @@ router.post('/', validate(RestaurantSchema), async (
         const id = nanoid();
         const restaurantKey = restaurantKeyById(id);
         const hashData = { id, name: data.name, location: data.location };
-        const addResult = await redis.hset(restaurantKey, hashData);
-        console.log(`Added ${addResult} fields`);
+        await Promise.all(
+            [
+                ...data.cuisines.map((cuisine) => 
+                    Promise.all(
+                        [
+                            redis.sadd(cuisinesKey, cuisine),
+                            redis.sadd(cuisineKey(cuisine), id),
+                            redis.sadd(restaurantCuisinesKeyById(id), cuisine)
+                        ]
+                    )),
+                [redis.hset(restaurantKey, hashData)]
+            ]
+        );
         successResponse(res, 201, hashData, 'Added new restaurant');
         return;
     } catch (error) {
@@ -117,13 +128,14 @@ router.get('/:restaurantId', checkRestaurantExists, async (
     const { restaurantId } = req.params;
     try {
         const restaurantKey = restaurantKeyById(restaurantId);
-        const [viewCount, restaurant] = await Promise.all(
+        const [viewCount, restaurant, cuisines] = await Promise.all(
             [
                 redis.hincrby(restaurantKey, 'viewCount', '1'),
-                redis.hgetall(restaurantKey)
+                redis.hgetall(restaurantKey),
+                redis.smembers(restaurantCuisinesKeyById(restaurantId))
             ]
         );
-        successResponse(res, 200, restaurant);
+        successResponse(res, 200, { ...restaurant, cuisines });
         return;
     } catch (error) {
         next(error);
