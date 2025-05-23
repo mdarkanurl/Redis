@@ -54,7 +54,33 @@ async (req: Request, res: Response, next: NextFunction) => {
     } catch (error) {
         next(error);
     }
-})
+});
+
+router.get(
+    '/:restaurantId/reviews',
+    checkRestaurantExists,
+    async (req: Request, res: Response, next: NextFunction) => {
+        const { restaurantId } = req.params;
+        const { page = 1, limit = 10 } = req.query;
+        const start = (Number(page) -1) * Number(limit);
+        const end = start + Number(limit) -1;
+
+        try {
+            const reviewKey = reviewKeyById(restaurantId);
+            const reviewIds = await redis.lrange(
+                reviewKey, start, end
+            );
+            const reviews = await Promise.all(
+                reviewIds.map(id => redis.hgetall(reviewDetailsKeyById(id)))
+            );
+
+            successResponse(res, 200, reviews);
+            return;
+        } catch (error) {
+            next(error);
+        }
+    }
+)
 
 router.get('/:restaurantId', checkRestaurantExists, async (
     req: Request<{ restaurantId: string }>,
