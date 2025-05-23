@@ -1,8 +1,9 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { validate } from "../middlewares/validate";
 import { Restaurant, RestaurantSchema } from "../schema/restaurants";
+import { ReviewSchema, Review } from "../schema/review";
 import { nanoid } from "nanoid";
-import { restaurantKeyById } from "../utils/redisKeys";
+import { restaurantKeyById, reviewDetailsKeyById, reviewKeyById } from "../utils/redisKeys";
 import redis from "../utils/redis";
 import { successResponse } from "../utils/res";
 import { checkRestaurantExists } from "../middlewares/checkRestaurantId";
@@ -26,6 +27,34 @@ router.post('/', validate(RestaurantSchema), async (
         next(error);
     }
 });
+
+router.post('/:restaurantId/reviews',
+    checkRestaurantExists,
+    validate(ReviewSchema),
+async (req: Request, res: Response, next: NextFunction) => {
+    const { restaurantId } = req.params;
+    const data = req.body;
+    try {
+        const reviewId = nanoid();
+        const reviewKey = reviewKeyById(restaurantId);
+        const reviewDetailsKey = reviewDetailsKeyById(reviewId);
+        const reviewData = {
+            id: reviewId,
+            ...data,
+            timestamp: Date.now(),
+            restaurantId
+        }
+
+        await Promise.all([
+            redis.lpush(reviewKey, reviewId),
+            redis.hset(reviewDetailsKey, reviewData)
+        ]);
+        successResponse(res, 201, reviewData, 'Review added');
+        return;
+    } catch (error) {
+        next(error);
+    }
+})
 
 router.get('/:restaurantId', checkRestaurantExists, async (
     req: Request<{ restaurantId: string }>,
